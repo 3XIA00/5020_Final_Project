@@ -1,0 +1,1590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Banking Model: A Life Simulation</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3250;
+    --accent: #6c63ff;
+    --accent2: #ff6584;
+    --accent3: #43e97b;
+    --text: #e8eaf6;
+    --text-muted: #7b82a8;
+    --income-low: #ff6584;
+    --income-mid: #f9ca24;
+    --income-high: #6c63ff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── SCREEN SYSTEM ── */
+  .screen { display: none; min-height: 100vh; }
+  .screen.active { display: flex; flex-direction: column; }
+
+  /* ── HEADER ── */
+  .sim-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+  .sim-header h1 { font-size: 1.1rem; font-weight: 600; color: var(--text); }
+  .sim-header .subtitle { font-size: 0.8rem; color: var(--text-muted); }
+  .stage-pills { display: flex; gap: 8px; margin-left: auto; }
+  .pill {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: var(--surface2);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    transition: all 0.3s;
+  }
+  .pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .pill.done { background: var(--surface2); color: var(--accent3); border-color: var(--accent3); }
+
+  /* ── MAIN CONTENT ── */
+  .main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 40px 24px; gap: 32px; }
+  #screen-bigpicture .main { align-items: stretch; }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 32px;
+    width: 100%;
+    max-width: 820px;
+  }
+  .card h2 { font-size: 1.3rem; margin-bottom: 6px; }
+  .card .card-desc { color: var(--text-muted); font-size: 0.88rem; line-height: 1.6; margin-bottom: 24px; }
+
+  /* ── ATTRIBUTE GRID ── */
+  .attr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .attr-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .attr-item .attr-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 6px; }
+  .attr-item .attr-value { font-size: 1.15rem; font-weight: 700; }
+  .attr-item .attr-bar { height: 4px; border-radius: 2px; background: var(--border); margin-top: 8px; overflow: hidden; }
+  .attr-item .attr-bar-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width 0.5s ease; }
+  .attr-item.hidden-attr { opacity: 0.4; filter: blur(4px); user-select: none; }
+
+  /* ── INCOME BADGE ── */
+  .income-low { color: var(--income-low); }
+  .income-mid { color: var(--income-mid); }
+  .income-high { color: var(--income-high); }
+
+  /* ── BUTTONS ── */
+  .btn {
+    padding: 12px 28px;
+    border-radius: 10px;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #5a52d4; transform: translateY(-1px); }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-row { display: flex; gap: 12px; flex-wrap: wrap; }
+
+  /* ── TIME BUDGET ── */
+  .budget-display {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .budget-label { font-size: 0.8rem; color: var(--text-muted); flex-shrink: 0; }
+  .budget-bar { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .budget-fill { height: 100%; border-radius: 4px; background: var(--accent3); transition: width 0.2s; }
+  .budget-fill.over { background: var(--accent2); }
+  .budget-count { font-size: 0.85rem; font-weight: 700; min-width: 60px; text-align: right; }
+
+  /* ── SLIDERS ── */
+  .slider-group { display: flex; flex-direction: column; gap: 18px; margin-bottom: 28px; }
+  .slider-item {}
+  .slider-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .slider-name { font-size: 0.9rem; font-weight: 600; }
+  .slider-desc { font-size: 0.75rem; color: var(--text-muted); }
+  .slider-val { font-size: 0.9rem; font-weight: 700; color: var(--accent); min-width: 32px; text-align: right; }
+  input[type=range] {
+    width: 100%; height: 6px; -webkit-appearance: none; appearance: none;
+    background: var(--border); border-radius: 3px; outline: none; cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); cursor: pointer;
+    box-shadow: 0 0 0 3px rgba(108,99,255,0.2);
+    transition: box-shadow 0.2s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover { box-shadow: 0 0 0 6px rgba(108,99,255,0.2); }
+  .slider-locked { opacity: 0.5; pointer-events: none; }
+  .lock-notice { font-size: 0.72rem; color: var(--accent2); margin-top: 4px; }
+
+  /* ── SCORE REVEAL ── */
+  .score-reveal {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    text-align: center;
+    margin-top: 8px;
+  }
+  .score-reveal .score-label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 8px; }
+  .score-reveal .score-number { font-size: 3rem; font-weight: 800; color: var(--accent); transition: all 0.5s; }
+  .score-reveal .score-context { font-size: 0.82rem; color: var(--text-muted); margin-top: 8px; line-height: 1.5; }
+  .score-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; }
+
+  /* ── HAPPINESS REVEAL ── */
+  #screen-reveal .main { justify-content: center; }
+  .happiness-container { text-align: center; max-width: 600px; }
+  .happiness-label { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--text-muted); margin-bottom: 16px; }
+  .happiness-number {
+    font-size: 6rem; font-weight: 900; line-height: 1;
+    background: linear-gradient(135deg, var(--accent3), var(--accent));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    opacity: 0; transform: scale(0.5);
+    transition: opacity 0.8s ease, transform 0.8s ease;
+    margin-bottom: 8px;
+  }
+  .happiness-number.revealed { opacity: 1; transform: scale(1); }
+  .happiness-tagline { font-size: 1.1rem; color: var(--text-muted); margin-bottom: 32px; opacity: 0; transition: opacity 0.6s ease 0.6s; }
+  .happiness-tagline.revealed { opacity: 1; }
+  .happiness-breakdown { display: flex; flex-direction: column; gap: 10px; margin: 24px 0; opacity: 0; transition: opacity 0.6s ease 1s; }
+  .happiness-breakdown.revealed { opacity: 1; }
+  .h-bar-item { display: flex; align-items: center; gap: 12px; }
+  .h-bar-name { font-size: 0.8rem; color: var(--text-muted); width: 150px; text-align: right; flex-shrink: 0; }
+  .h-bar-track { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .h-bar-fill { height: 100%; border-radius: 4px; width: 0; transition: width 1.2s ease 1.2s; }
+  .h-bar-fill.positive { background: var(--accent3); }
+  .h-bar-fill.negative { background: var(--accent2); }
+  .h-bar-val { font-size: 0.8rem; font-weight: 700; width: 40px; }
+  .h-bar-val.positive { color: var(--accent3); }
+  .h-bar-val.negative { color: var(--accent2); }
+
+  /* ── BIG PICTURE ── */
+  .charts-row-single { width: 100%; display: flex; justify-content: center; }
+  .charts-row-single .chart-card { max-width: 900px; width: 100%; }
+  .charts-row-double { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 100%; }
+  @media (max-width: 900px) { .charts-row-double { grid-template-columns: 1fr; } }
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+  }
+  .chart-card h3 { font-size: 1rem; margin-bottom: 4px; }
+  .chart-card .chart-tag { display: inline-block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 4px; margin-bottom: 8px; }
+  .chart-tag.claim { background: rgba(67,233,123,0.15); color: var(--accent3); border: 1px solid var(--accent3); }
+  .chart-tag.reality { background: rgba(255,101,132,0.15); color: var(--accent2); border: 1px solid var(--accent2); }
+  .chart-card .chart-desc { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5; }
+  .chart-wrap { position: relative; height: 340px; }
+  .you-label {
+    display: inline-block;
+    background: var(--accent2);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-top: 8px;
+  }
+
+  /* ── REFLECTION ── */
+  .reflection-card {
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: 20px;
+    padding: 52px 64px;
+    max-width: 860px;
+    width: 100%;
+    margin: 0 auto;
+    line-height: 2;
+  }
+  .reflection-card h3 { font-size: 1.4rem; color: var(--accent); margin-bottom: 20px; text-align: center; }
+  .reflection-card p { color: var(--text-muted); font-size: 1.05rem; margin-bottom: 20px; }
+  .reflection-card p:last-child { margin-bottom: 0; }
+  .reflection-card strong { color: var(--text); }
+
+  /* ── FREIRE QUOTE ── */
+  .quote-block {
+    border-left: 3px solid var(--accent);
+    padding: 16px 24px;
+    margin: 20px 0;
+    font-style: italic;
+    color: var(--text-muted);
+    font-size: 1rem;
+    line-height: 1.9;
+  }
+
+  /* ── INTRO SCREEN ── */
+  #screen-intro .main { justify-content: center; text-align: center; }
+  .intro-content { max-width: 600px; }
+  .intro-content h1 { font-size: 2.4rem; font-weight: 900; line-height: 1.2; margin-bottom: 16px; }
+  .intro-content h1 span { color: var(--accent); }
+  .intro-content p { color: var(--text-muted); font-size: 1rem; line-height: 1.7; margin-bottom: 32px; }
+  .intro-tag { display: inline-block; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 0.75rem; color: var(--text-muted); margin: 4px; }
+
+  /* ── STAGE BANNER ── */
+  .stage-banner {
+    background: linear-gradient(135deg, var(--accent) 0%, #a78bfa 100%);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .stage-banner .stage-num { font-size: 2.5rem; font-weight: 900; opacity: 0.3; line-height: 1; }
+  .stage-banner .stage-info h2 { font-size: 1.2rem; }
+  .stage-banner .stage-info p { font-size: 0.82rem; opacity: 0.8; margin-top: 2px; }
+
+  /* ── TOOLTIP ── */
+  .tooltip-icon { display: inline-block; width: 16px; height: 16px; background: var(--surface2); border: 1px solid var(--border); border-radius: 50%; text-align: center; line-height: 16px; font-size: 0.65rem; cursor: help; margin-left: 6px; color: var(--text-muted); }
+
+  /* ── TRANSITIONS ── */
+  .fade-in { animation: fadeIn 0.5s ease forwards; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ── INCOME LEGEND ── */
+  .legend { display: flex; gap: 16px; margin-top: 12px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--text-muted); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════
+     SCREEN 0 — INTRO
+══════════════════════════════════════════════ -->
+<div class="screen active" id="screen-intro">
+  <div class="main">
+    <div class="intro-content fade-in">
+      <h1>The <span>Banking Model</span><br>of Education</h1>
+      <p>
+        Paulo Freire warned us that education can become a system of <em>deposits</em> —
+        filling students with approved knowledge, then measuring how well they
+        can return it. Modern algorithms have industrialised this process.
+      </p>
+      <p>
+        In this simulation you will live one student's journey through
+        standardised testing, college admissions, and graduate school —
+        making choices, chasing scores, and only at the very end discovering
+        what it cost you.
+      </p>
+      <div style="margin-bottom: 28px;">
+        <span class="intro-tag">SAT / GRE</span>
+        <span class="intro-tag">College Admissions</span>
+        <span class="intro-tag">Grad School</span>
+        <span class="intro-tag">Fairness & Happiness</span>
+      </div>
+      <button class="btn btn-primary" onclick="startSim()">Begin Your Journey →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SCREEN 1 — BACKGROUND SETUP
+══════════════════════════════════════════════ -->
+<div class="screen" id="screen-background">
+  <div class="sim-header">
+    <div>
+      <h1>The Banking Model Simulation</h1>
+      <div class="subtitle">Your starting conditions</div>
+    </div>
+    <div class="stage-pills">
+      <div class="pill active" id="pill-1">Background</div>
+      <div class="pill" id="pill-2">SAT</div>
+      <div class="pill" id="pill-3">College</div>
+      <div class="pill" id="pill-4">Grad School</div>
+      <div class="pill" id="pill-5">Reveal</div>
+      <div class="pill" id="pill-6">Big Picture</div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="card fade-in">
+      <h2>Meet Your Student</h2>
+      <p class="card-desc">
+        You have been born into a particular set of circumstances.
+        These are not choices — they are the conditions the algorithm will read you through.
+        One attribute is hidden even from you: your genuine intellectual curiosity.
+        The system will never directly measure it.
+      </p>
+      <div class="attr-grid" id="bg-attr-grid"></div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="generateStudent()">↻ Re-roll student</button>
+        <button class="btn btn-primary" onclick="goToSAT()">Accept these conditions →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SCREEN 2 — SAT STAGE
+══════════════════════════════════════════════ -->
+<div class="screen" id="screen-sat">
+  <div class="sim-header">
+    <div>
+      <h1>The Banking Model Simulation</h1>
+      <div class="subtitle">Stage 1 of 3</div>
+    </div>
+    <div class="stage-pills">
+      <div class="pill done" id="pill2-1">Background ✓</div>
+      <div class="pill active" id="pill2-2">SAT</div>
+      <div class="pill" id="pill2-3">College</div>
+      <div class="pill" id="pill2-4">Grad School</div>
+      <div class="pill" id="pill2-5">Reveal</div>
+      <div class="pill" id="pill2-6">Big Picture</div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="card fade-in" style="max-width: 820px;">
+      <div class="stage-banner">
+        <div class="stage-num">01</div>
+        <div class="stage-info">
+          <h2>SAT Preparation & Test Day</h2>
+          <p>How will you spend your time leading up to the SAT?</p>
+        </div>
+      </div>
+      <p class="card-desc" style="margin-top: 16px;">
+        You have a limited time budget — constrained by your background.
+        Allocate your hours across these activities. Remember: the SAT claims
+        to measure your readiness and potential. Watch what it actually rewards.
+      </p>
+      <div class="budget-display">
+        <span class="budget-label">Time Budget Used</span>
+        <div class="budget-bar"><div class="budget-fill" id="sat-budget-fill" style="width:0%"></div></div>
+        <span class="budget-count" id="sat-budget-count">0 / 10</span>
+      </div>
+      <div class="slider-group" id="sat-sliders"></div>
+      <div id="sat-locked-notice" style="display:none; margin-bottom:16px;"></div>
+      <button class="btn btn-primary" onclick="computeSAT()" id="btn-sat">Calculate My SAT Score →</button>
+    </div>
+    <div class="card fade-in" id="sat-result" style="display:none; max-width:820px;">
+      <h2>Your SAT Result</h2>
+      <div class="score-row">
+        <div class="score-reveal">
+          <div class="score-label">SAT Score</div>
+          <div class="score-number" id="sat-score-display">—</div>
+          <div class="score-context" id="sat-score-context"></div>
+        </div>
+        <div class="score-reveal">
+          <div class="score-label">What Drove Your Score</div>
+          <div style="padding: 8px 0;" id="sat-breakdown"></div>
+        </div>
+      </div>
+      <p style="font-size:0.82rem; color:var(--text-muted); margin-top:20px; line-height:1.6;" id="sat-reflection"></p>
+      <div class="btn-row" style="margin-top: 20px;">
+        <button class="btn btn-primary" onclick="goToCollege()">Proceed to College Admissions →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SCREEN 3 — COLLEGE ADMISSIONS
+══════════════════════════════════════════════ -->
+<div class="screen" id="screen-college">
+  <div class="sim-header">
+    <div>
+      <h1>The Banking Model Simulation</h1>
+      <div class="subtitle">Stage 2 of 3</div>
+    </div>
+    <div class="stage-pills">
+      <div class="pill done">Background ✓</div>
+      <div class="pill done">SAT ✓</div>
+      <div class="pill active">College</div>
+      <div class="pill">Grad School</div>
+      <div class="pill">Reveal</div>
+      <div class="pill">Big Picture</div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="card fade-in" style="max-width: 820px;">
+      <div class="stage-banner">
+        <div class="stage-num">02</div>
+        <div class="stage-info">
+          <h2>College Application Years</h2>
+          <p>How will you spend your high school years building your profile?</p>
+        </div>
+      </div>
+      <p class="card-desc" style="margin-top: 16px;">
+        Your SAT score is already locked in. Now the admissions algorithm evaluates
+        your essays, extracurriculars, and academic profile. It calls this
+        "holistic review." Allocate your time across these activities.
+      </p>
+      <div class="budget-display">
+        <span class="budget-label">Time Budget Used</span>
+        <div class="budget-bar"><div class="budget-fill" id="col-budget-fill" style="width:0%"></div></div>
+        <span class="budget-count" id="col-budget-count">0 / 10</span>
+      </div>
+      <div class="slider-group" id="col-sliders"></div>
+      <button class="btn btn-primary" onclick="computeCollege()">Submit My Application →</button>
+    </div>
+    <div class="card fade-in" id="col-result" style="display:none; max-width:820px;">
+      <h2>College Admissions Result</h2>
+      <div class="score-row">
+        <div class="score-reveal">
+          <div class="score-label">College Tier Admitted To</div>
+          <div class="score-number" id="col-tier-display" style="font-size:1.8rem;">—</div>
+          <div class="score-context" id="col-tier-context"></div>
+        </div>
+        <div class="score-reveal">
+          <div class="score-label">Admissions Score</div>
+          <div class="score-number" id="col-score-display">—</div>
+          <div class="score-context">out of 100</div>
+        </div>
+      </div>
+      <p style="font-size:0.82rem; color:var(--text-muted); margin-top:20px; line-height:1.6;" id="col-reflection"></p>
+      <div class="btn-row" style="margin-top: 20px;">
+        <button class="btn btn-primary" onclick="goToGrad()">Proceed to Graduate School →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SCREEN 4 — GRE / GRAD ADMISSIONS
+══════════════════════════════════════════════ -->
+<div class="screen" id="screen-grad">
+  <div class="sim-header">
+    <div>
+      <h1>The Banking Model Simulation</h1>
+      <div class="subtitle">Stage 3 of 3</div>
+    </div>
+    <div class="stage-pills">
+      <div class="pill done">Background ✓</div>
+      <div class="pill done">SAT ✓</div>
+      <div class="pill done">College ✓</div>
+      <div class="pill active">Grad School</div>
+      <div class="pill">Reveal</div>
+      <div class="pill">Big Picture</div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="card fade-in" style="max-width: 820px;">
+      <div class="stage-banner">
+        <div class="stage-num">03</div>
+        <div class="stage-info">
+          <h2>GRE & Graduate School Application</h2>
+          <p>The system asks you to prove yourself one more time.</p>
+        </div>
+      </div>
+      <p class="card-desc" style="margin-top: 16px;">
+        Your college tier now shapes what opportunities you can access —
+        research experience, recommendation letters, baseline preparation.
+        You start this stage from wherever your college left you.
+        One more time: how do you spend your time?
+      </p>
+      <div class="budget-display">
+        <span class="budget-label">Time Budget Used</span>
+        <div class="budget-bar"><div class="budget-fill" id="grad-budget-fill" style="width:0%"></div></div>
+        <span class="budget-count" id="grad-budget-count">0 / 10</span>
+      </div>
+      <div class="slider-group" id="grad-sliders"></div>
+      <button class="btn btn-primary" onclick="computeGrad()">Submit GRE & Applications →</button>
+    </div>
+    <div class="card fade-in" id="grad-result" style="display:none; max-width:820px;">
+      <h2>Graduate Admissions Result</h2>
+      <div class="score-row">
+        <div class="score-reveal">
+          <div class="score-label">GRE Score</div>
+          <div class="score-number" id="grad-gre-display">—</div>
+          <div class="score-context">out of 340</div>
+        </div>
+        <div class="score-reveal">
+          <div class="score-label">Final Outcome Score</div>
+          <div class="score-number" id="grad-score-display">—</div>
+          <div class="score-context">out of 100</div>
+        </div>
+      </div>
+      <p style="font-size:0.82rem; color:var(--text-muted); margin-top:20px; line-height:1.6;" id="grad-reflection"></p>
+      <div class="btn-row" style="margin-top: 20px;">
+        <button class="btn btn-primary" onclick="goToReveal()">See What It Cost You →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SCREEN 5 — HAPPINESS REVEAL
+══════════════════════════════════════════════ -->
+<div class="screen" id="screen-reveal">
+  <div class="sim-header">
+    <div><h1>The Banking Model Simulation</h1><div class="subtitle">The reveal</div></div>
+    <div class="stage-pills">
+      <div class="pill done">Background ✓</div>
+      <div class="pill done">SAT ✓</div>
+      <div class="pill done">College ✓</div>
+      <div class="pill done">Grad ✓</div>
+      <div class="pill active">Reveal</div>
+      <div class="pill">Big Picture</div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="happiness-container fade-in">
+      <div class="happiness-label">Throughout your journey, we tracked something the algorithm never asked about</div>
+      <div style="font-size:3rem; font-weight:900; margin-bottom:16px;">Your Happiness</div>
+      <div class="card" style="margin-bottom:32px; text-align:left;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px;">
+          <span style="font-size:0.85rem; color:var(--text-muted);">Final Outcome Score (what the system saw)</span>
+          <span style="font-size:1.6rem; font-weight:800; color:var(--accent);" id="reveal-outcome">—</span>
+        </div>
+        <div style="height:1px; background:var(--border); margin-bottom:12px;"></div>
+        <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">Happiness Score (what the system never asked)</div>
+        <div class="happiness-number" id="happiness-number">—</div>
+        <div class="happiness-tagline" id="happiness-tagline"></div>
+        <div class="happiness-breakdown" id="happiness-breakdown"></div>
+      </div>
+      <button class="btn btn-primary" onclick="goToBigPicture()" id="btn-big-picture" style="display:none;">
+        See How Others Fared →
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SCREEN 6 — BIG PICTURE
+══════════════════════════════════════════════ -->
+<div class="screen" id="screen-bigpicture">
+  <div class="sim-header">
+    <div><h1>The Banking Model Simulation</h1><div class="subtitle">The system at scale</div></div>
+    <div class="stage-pills">
+      <div class="pill done">Background ✓</div>
+      <div class="pill done">SAT ✓</div>
+      <div class="pill done">College ✓</div>
+      <div class="pill done">Grad ✓</div>
+      <div class="pill done">Reveal ✓</div>
+      <div class="pill active">Big Picture</div>
+    </div>
+  </div>
+  <div class="main" style="width:100%; padding: 40px 32px; box-sizing: border-box;">
+    <div style="text-align:center; width:100%; margin: 0 auto;" class="fade-in">
+      <h2 style="font-size:1.6rem; margin-bottom:12px;">You Were Not Alone</h2>
+      <p style="color:var(--text-muted); font-size:0.92rem; line-height:1.7;">
+        We just ran 300 students through the same system. Their genuine intellectual
+        potential was distributed randomly — no correlation with family income.
+        Watch what the algorithm did with that.
+        <span style="color:var(--accent2); font-weight:700;">Your dot</span> appears in each chart.
+      </p>
+      <div class="legend" style="justify-content:center; margin-top: 12px;">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--income-low)"></div>Low income</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--income-mid)"></div>Middle income</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--income-high)"></div>High income</div>
+        <div class="legend-item"><div style="width:14px;height:14px;flex-shrink:0;background:#ff2200;clip-path:polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);"></div>You</div>
+      </div>
+    </div>
+
+    <!-- Row 1: Curiosity vs Income baseline -->
+    <div class="charts-row-single fade-in">
+      <div class="chart-card">
+        <h3>Genuine Curiosity vs Family Income</h3>
+        <p class="chart-desc">
+          Intellectual potential is distributed randomly across all income levels — no correlation with wealth.
+          This is the baseline truth before the algorithm touches it.
+        </p>
+        <div class="chart-wrap"><canvas id="chart-curiosity"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Row 2: Claim vs Reality -->
+    <div class="charts-row-double fade-in">
+      <div class="chart-card">
+        <div class="chart-tag claim">What the algorithm claims to measure</div>
+        <h3>Final Outcome Score vs Genuine Curiosity</h3>
+        <p class="chart-desc">
+          If the system were fair, scores should rise with genuine curiosity.
+          A strong upward trend here would validate the algorithm's claim to measure merit.
+        </p>
+        <div class="chart-wrap"><canvas id="chart-claim"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-tag reality">What the algorithm actually rewards</div>
+        <h3>Final Outcome Score vs Family Income</h3>
+        <p class="chart-desc">
+          This is what the algorithm actually produced. Compare the strength of this
+          pattern to the chart on the left. The difference is the hidden unfairness.
+        </p>
+        <div class="chart-wrap"><canvas id="chart-outcome"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Row 3: Happiness -->
+    <div class="charts-row-single fade-in">
+      <div class="chart-card">
+        <h3>Happiness vs Final Outcome Score</h3>
+        <p class="chart-desc">
+          The algorithm never asked about this. Students who scored highest often sacrificed the most.
+          Does winning the banking model feel like winning?
+        </p>
+        <div class="chart-wrap"><canvas id="chart-happiness"></canvas></div>
+      </div>
+    </div>
+
+    <!-- REFLECTION -->
+    <div class="reflection-card fade-in">
+      <h3>What This Simulation Shows — and What It Doesn't</h3>
+
+      <div class="quote-block">
+        "The more students work at storing the deposits entrusted to them, the less they develop
+        the critical consciousness which would result from their intervention in the world as
+        transformers of that world." — Paulo Freire, <em>Pedagogy of the Oppressed</em>
+      </div>
+
+      <p>
+        This simulation models how <strong>standardised testing algorithms</strong> — the SAT, GRE,
+        and college admissions scoring systems — claim to measure academic merit objectively
+        while systematically encoding the advantages of family income, school quality, and
+        access to private tutoring. A student's <strong>genuine intellectual curiosity</strong>,
+        randomly distributed across all income levels, has weak predictive power in
+        determining final outcomes. Family income, compounding at every stage, has strong predictive power.
+      </p>
+
+      <p>
+        The simulation also tracks <strong>happiness</strong> — a variable the algorithm never
+        considers. Time spent on personal passions, sports, and genuine deep learning
+        contributes to flourishing. Time spent grinding test preparation, while it
+        mechanically raises scores, diminishes wellbeing — particularly when it
+        crowds out everything else. Notice that deep learning, while intellectually rewarding,
+        carries a lower happiness weight than sports or personal interests: the banking model
+        has transformed even genuine curiosity into a stressful, high-stakes performance,
+        robbing it of much of its intrinsic joy.
+      </p>
+
+      <p>
+        <strong>What this simulation does not cover:</strong> This model intentionally
+        brackets race and ethnicity, which research consistently shows carry additional
+        score penalties not fully explained by income. It also does not model disability
+        status, English-language learner status, geographic disadvantage beyond school quality,
+        or the psychological toll of stereotype threat. A complete accounting of the
+        banking model's unfairness would need to include all of these axes. We acknowledge
+        them as real, significant, and beyond the scope of this project.
+      </p>
+
+      <p>
+        <strong>A note on data:</strong> All students in this simulation — including yours — are generated from random parameters, not drawn from real individuals or datasets. The formulas are calibrated to reflect documented patterns in educational research, but the specific outcomes you see are synthetic illustrations, not real-life cases. The simulation is a model, not a measurement.
+      </p>
+
+      <p>
+        The banking model's deepest harm is not only that it produces unequal outcomes —
+        it is that it presents those outcomes as <em>earned</em>, laundering structural
+        advantage through the language of merit and objectivity. The algorithm does not
+        see the student. It sees a score.
+      </p>
+    </div>
+
+    <div class="btn-row" style="justify-content:center; padding-bottom: 40px;">
+      <button class="btn btn-secondary" onclick="location.reload()">↻ Start Over</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  SIMULATION STATE
+// ═══════════════════════════════════════════════
+let student = {};
+let stages = { sat: {}, college: {}, grad: {} };
+let happiness = { h1: 0, h2: 0, h3: 0 };
+let charts = {};
+
+// ═══════════════════════════════════════════════
+//  UTILITIES
+// ═══════════════════════════════════════════════
+function rand(min, max) { return Math.random() * (max - min) + min; }
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+function round1(v) { return Math.round(v * 10) / 10; }
+
+function skewedIncome() {
+  // Log-normal-ish: most students lower/mid income
+  let u = Math.random();
+  if (u < 0.35) return rand(0.05, 0.25);
+  if (u < 0.70) return rand(0.25, 0.60);
+  if (u < 0.90) return rand(0.60, 0.82);
+  return rand(0.82, 1.0);
+}
+
+function incomeLabel(inc) {
+  if (inc < 0.30) return { label: 'Low Income', cls: 'income-low' };
+  if (inc < 0.65) return { label: 'Middle Income', cls: 'income-mid' };
+  return { label: 'High Income', cls: 'income-high' };
+}
+
+function barHTML(val, color='var(--accent)') {
+  return `<div style="height:4px;border-radius:2px;background:var(--border);margin-top:6px;overflow:hidden;">
+    <div style="height:100%;border-radius:2px;background:${color};width:${Math.round(val*100)}%;transition:width 0.6s ease;"></div>
+  </div>`;
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+}
+
+// ═══════════════════════════════════════════════
+//  STUDENT GENERATION
+// ═══════════════════════════════════════════════
+function generateStudent() {
+  const income = skewedIncome();
+  const schoolQuality = clamp(0.6 * income + 0.4 * rand(0, 1), 0, 1);
+  const firstGen = Math.random() < (1 - income * 0.8 + 0.1);
+  const geos = ['Urban', 'Suburban', 'Rural'];
+  // Rural slightly more likely for low income
+  let geoIdx;
+  if (income < 0.3) geoIdx = Math.random() < 0.4 ? 2 : Math.random() < 0.5 ? 0 : 1;
+  else if (income < 0.65) geoIdx = Math.random() < 0.5 ? 1 : Math.random() < 0.5 ? 0 : 2;
+  else geoIdx = Math.random() < 0.6 ? 1 : Math.random() < 0.7 ? 0 : 2;
+
+  const genuineCuriosity = rand(0.1, 1.0); // independent of income
+  const tutoringAccess = Math.pow(income, 0.7);
+
+  // Available time budget (0-10 scale)
+  const availableTime = clamp(4 + income * 4 + schoolQuality * 2 + rand(-0.5, 0.5), 4, 10);
+
+  student = {
+    income, schoolQuality, firstGen,
+    geography: geos[geoIdx],
+    genuineCuriosity,
+    tutoringAccess,
+    availableTime: Math.round(availableTime * 2) / 2,
+  };
+
+  renderBackground();
+}
+
+function renderBackground() {
+  const { income, schoolQuality, firstGen, geography, availableTime } = student;
+  const inc = incomeLabel(income);
+
+  const grid = document.getElementById('bg-attr-grid');
+  grid.innerHTML = `
+    ${attrItem('Family Income', `<span class="${inc.cls}">${inc.label}</span>`, income, inc.cls === 'income-low' ? 'var(--income-low)' : inc.cls === 'income-mid' ? 'var(--income-mid)' : 'var(--income-high)')}
+    ${attrItem('School Quality', qualityLabel(schoolQuality), schoolQuality, 'var(--accent)')}
+    ${attrItem('First-Generation', firstGen ? 'Yes' : 'No', firstGen ? 0.2 : 0.8, firstGen ? 'var(--accent2)' : 'var(--accent3)')}
+    ${attrItem('Geography', geography, geography === 'Suburban' ? 0.7 : geography === 'Urban' ? 0.5 : 0.3, 'var(--accent)')}
+    ${attrItem('Available Time Budget', availableTime + ' / 10', availableTime / 10, 'var(--accent3)')}
+    <div class="attr-item hidden-attr">
+      <div class="attr-label">Genuine Curiosity</div>
+      <div class="attr-value">???</div>
+      <div class="attr-bar"><div class="attr-bar-fill" style="width:50%"></div></div>
+      <div style="font-size:0.7rem;color:var(--accent2);margin-top:6px;">Hidden from the algorithm</div>
+    </div>
+  `;
+}
+
+function attrItem(label, valueHTML, barVal, barColor) {
+  return `<div class="attr-item">
+    <div class="attr-label">${label}</div>
+    <div class="attr-value">${valueHTML}</div>
+    <div class="attr-bar"><div class="attr-bar-fill" style="width:${Math.round(barVal*100)}%;background:${barColor}"></div></div>
+  </div>`;
+}
+
+function qualityLabel(q) {
+  if (q < 0.25) return 'Underfunded';
+  if (q < 0.50) return 'Below Average';
+  if (q < 0.70) return 'Average';
+  if (q < 0.85) return 'Good';
+  return 'Well-Funded';
+}
+
+// ═══════════════════════════════════════════════
+//  SLIDER BUILDER
+// ═══════════════════════════════════════════════
+function buildSliders(containerId, items, budgetFillId, budgetCountId, maxBudget) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+
+  items.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'slider-item' + (item.locked ? ' slider-locked' : '');
+    div.innerHTML = `
+      <div class="slider-header">
+        <div>
+          <span class="slider-name">${item.name}</span>
+          <span class="slider-desc"> — ${item.desc}</span>
+        </div>
+        <span class="slider-val" id="val-${item.id}">0</span>
+      </div>
+      <input type="range" min="0" max="${maxBudget}" step="0.5" value="0"
+        id="slider-${item.id}" ${item.locked ? 'disabled' : ''}
+        oninput="updateBudget('${containerId}', '${budgetFillId}', '${budgetCountId}', ${maxBudget})">
+      ${item.locked ? `<div class="lock-notice">⚠ Reduced access — tutoring not available at this income level</div>` : ''}
+    `;
+    container.appendChild(div);
+  });
+
+  updateBudget(containerId, budgetFillId, budgetCountId, maxBudget);
+}
+
+function updateBudget(containerId, fillId, countId, max) {
+  const sliders = document.querySelectorAll(`#${containerId} input[type=range]`);
+  let total = 0;
+  sliders.forEach(s => {
+    total += parseFloat(s.value);
+    const valEl = document.getElementById('val-' + s.id.replace('slider-',''));
+    if (valEl) valEl.textContent = parseFloat(s.value).toFixed(1);
+  });
+  total = Math.round(total * 10) / 10;
+  const pct = Math.min(100, (total / max) * 100);
+  const fill = document.getElementById(fillId);
+  fill.style.width = pct + '%';
+  fill.className = 'budget-fill' + (total > max ? ' over' : '');
+  document.getElementById(countId).textContent = total.toFixed(1) + ' / ' + max;
+}
+
+function getSliderValues(containerId) {
+  const sliders = document.querySelectorAll(`#${containerId} input[type=range]`);
+  const vals = {};
+  sliders.forEach(s => {
+    vals[s.id.replace('slider-','')] = parseFloat(s.value);
+  });
+  return vals;
+}
+
+function getTotalBudget(containerId) {
+  const vals = getSliderValues(containerId);
+  return Object.values(vals).reduce((a,b) => a+b, 0);
+}
+
+// ═══════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════
+function startSim() {
+  generateStudent();
+  showScreen('screen-background');
+}
+
+function goToSAT() {
+  showScreen('screen-sat');
+  document.getElementById('sat-result').style.display = 'none';
+
+  const max = student.availableTime;
+  const tutoringLocked = student.tutoringAccess < 0.3;
+
+  buildSliders('sat-sliders', [
+    { id: 'sat_prep', name: 'Test Preparation', desc: 'SAT practice tests, drills, strategy' },
+    { id: 'sat_deep', name: 'Deep Learning', desc: 'Genuine exploration of subjects you love' },
+    { id: 'sat_personal', name: 'Personal Interests', desc: 'Games, music, comics, creative hobbies' },
+    { id: 'sat_sports', name: 'Sports & Activities', desc: 'Physical activity, team sports, clubs' },
+    { id: 'sat_compete', name: 'Academic Competitions', desc: 'Math olympiad, science fair, debate' },
+  ], 'sat-budget-fill', 'sat-budget-count', max);
+
+  const notice = document.getElementById('sat-locked-notice');
+  if (tutoringLocked) {
+    notice.style.display = 'block';
+    notice.innerHTML = `<div style="background:rgba(255,101,132,0.1);border:1px solid var(--accent2);border-radius:8px;padding:12px 16px;font-size:0.82rem;color:var(--accent2);">
+      Note: Your tutoring access is limited due to family income (${round1(student.tutoringAccess * 100)}%).
+      This means each hour of test preparation is less effective than for higher-income peers with private tutors.
+    </div>`;
+  } else {
+    notice.style.display = 'none';
+  }
+}
+
+function goToCollege() {
+  showScreen('screen-college');
+  document.getElementById('col-result').style.display = 'none';
+  const max = student.availableTime;
+
+  buildSliders('col-sliders', [
+    { id: 'col_prep', name: 'Application Prep', desc: 'Essays, college counseling, interview prep' },
+    { id: 'col_deep', name: 'Deep Learning', desc: 'Pursuing genuine intellectual interests' },
+    { id: 'col_personal', name: 'Personal Interests', desc: 'Things you love outside academics' },
+    { id: 'col_sports', name: 'Sports & Extracurriculars', desc: 'Teams, clubs, leadership roles' },
+    { id: 'col_compete', name: 'Academic Competitions', desc: 'Awards, research projects, publications' },
+  ], 'col-budget-fill', 'col-budget-count', max);
+}
+
+function goToGrad() {
+  showScreen('screen-grad');
+  document.getElementById('grad-result').style.display = 'none';
+  const max = student.availableTime;
+
+  buildSliders('grad-sliders', [
+    { id: 'grad_prep', name: 'GRE Preparation', desc: 'Test prep, practice exams, tutoring' },
+    { id: 'grad_deep', name: 'Deep Learning & Research', desc: 'Genuine scholarship, lab work, reading' },
+    { id: 'grad_personal', name: 'Personal Interests', desc: 'Hobbies and life outside academia' },
+    { id: 'grad_sports', name: 'Sports & Wellbeing', desc: 'Physical activity and social life' },
+    { id: 'grad_compete', name: 'Academic Profile Building', desc: 'Publications, conferences, networking' },
+  ], 'grad-budget-fill', 'grad-budget-count', max);
+}
+
+function goToReveal() {
+  showScreen('screen-reveal');
+  setTimeout(revealHappiness, 600);
+}
+
+function goToBigPicture() {
+  showScreen('screen-bigpicture');
+  setTimeout(buildBigPicture, 400);
+}
+
+// ═══════════════════════════════════════════════
+//  STAGE 1 — SAT COMPUTATION
+// ═══════════════════════════════════════════════
+function computeSAT() {
+  const max = student.availableTime;
+  const total = getTotalBudget('sat-sliders');
+  if (total > max + 0.1) {
+    alert(`You've used ${total.toFixed(1)} time units but only have ${max}. Please reduce your allocations.`);
+    return;
+  }
+
+  const v = getSliderValues('sat-sliders');
+  const { schoolQuality, genuineCuriosity, tutoringAccess, income } = student;
+
+  // Absolute time values — prep investment is absolute, not a fraction
+  const norm = max > 0 ? max : 10;
+  const prepAbs = v.sat_prep;          // absolute units for prepBoost
+  const deepN   = v.sat_deep    / norm; // normalised for baseKnowledge / happiness
+  const perN    = v.sat_personal / norm;
+  const sportsN = v.sat_sports   / norm;
+  const competeN= v.sat_compete  / norm;
+
+  // Base knowledge — school quality is the dominant income-driven factor; curiosity is minor
+  const baseKnowledge = clamp(0.65 * schoolQuality + 0.10 * genuineCuriosity + 0.25 * deepN, 0, 1);
+
+  // Prep boost — each absolute hour × tutoring multiplier (tutoring dramatically amplifies each hour)
+  const prepBoost = clamp(prepAbs * 0.15 * (0.20 + 0.80 * tutoringAccess), 0, 1);
+
+  // Raw score — 0.15 baseline so even minimal effort registers; prep is the dominant driver
+  const noise = rand(-0.02, 0.02);
+  const rawScore = clamp(0.15 + 0.20 * baseKnowledge + 0.55 * prepBoost + 0.08 * competeN + noise, 0, 1);
+
+  // Map to 400–1600
+  const satScore = Math.round(400 + rawScore * 1200);
+
+  // Happiness h1 — use normalised fractions for happiness (it's about balance, not absolute effort)
+  const prepN = prepAbs / norm;
+  const h1 = clamp(
+    0.35 * perN + 0.35 * sportsN + 0.15 * deepN - 0.25 * Math.pow(prepN, 2),
+    -0.5, 1
+  );
+  happiness.h1 = h1;
+
+  stages.sat = { score: satScore, rawScore, prepN, deepN, perN, sportsN, competeN, baseKnowledge, prepBoost };
+
+  // Display
+  document.getElementById('sat-result').style.display = 'block';
+  document.getElementById('sat-score-display').textContent = satScore;
+  document.getElementById('sat-score-context').textContent = satLabel(satScore);
+
+  // Breakdown
+  const bkEl = document.getElementById('sat-breakdown');
+  bkEl.innerHTML = `
+    <div style="font-size:0.78rem; margin-bottom:6px;">
+      <span style="color:var(--text-muted);">Preparation boost:</span>
+      <span style="font-weight:700;color:var(--accent);"> ${round1(prepBoost * 100)}%</span>
+    </div>
+    ${barHTML(prepBoost, 'var(--accent)')}
+    <div style="font-size:0.78rem; margin-top:10px; margin-bottom:6px;">
+      <span style="color:var(--text-muted);">Base knowledge:</span>
+      <span style="font-weight:700;color:var(--accent3);"> ${round1(baseKnowledge * 100)}%</span>
+    </div>
+    ${barHTML(baseKnowledge, 'var(--accent3)')}
+    <div style="font-size:0.72rem; margin-top:10px; color:var(--text-muted);">
+      Genuine curiosity contributed ~${round1(genuineCuriosity * 0.1 * 20)}% of your base score
+    </div>
+  `;
+
+  document.getElementById('sat-reflection').textContent = satReflection(satScore, prepBoost, baseKnowledge, student);
+  document.getElementById('sat-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function satLabel(score) {
+  if (score >= 1400) return 'Excellent — top 10% nationally';
+  if (score >= 1200) return 'Good — above national average';
+  if (score >= 1000) return 'Average — national median range';
+  if (score >= 800) return 'Below average';
+  return 'Significantly below average';
+}
+
+function satReflection(score, prepBoost, baseKnowledge, s) {
+  const inc = incomeLabel(s.income);
+  if (prepBoost > baseKnowledge + 0.1) {
+    return `Your score was driven primarily by preparation effort (boosted by your tutoring access of ${round1(s.tutoringAccess * 100)}%) rather than base knowledge. The SAT algorithm recorded this as academic readiness. It did not record your genuine curiosity score of ${round1(s.genuineCuriosity * 100)}.`;
+  } else if (s.tutoringAccess < 0.35 && score < 1100) {
+    return `Despite genuine intellectual potential, your limited tutoring access (${round1(s.tutoringAccess * 100)}%) meant each hour of prep was less effective than for higher-income peers. The algorithm does not footnote this. It simply records a number.`;
+  } else {
+    return `Your preparation and background combined to produce a score of ${score}. The algorithm will pass this number forward as a measure of your merit — without context, without your story, without your genuine curiosity score.`;
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  STAGE 2 — COLLEGE ADMISSIONS
+// ═══════════════════════════════════════════════
+function computeCollege() {
+  const max = student.availableTime;
+  const total = getTotalBudget('col-sliders');
+  if (total > max + 0.1) {
+    alert(`You've used ${total.toFixed(1)} time units but only have ${max}. Please reduce your allocations.`);
+    return;
+  }
+
+  const v = getSliderValues('col-sliders');
+  const { schoolQuality, genuineCuriosity, income, firstGen, tutoringAccess } = student;
+  const norm = max > 0 ? max : 10;
+
+  const prep    = v.col_prep    / norm;
+  const deep    = v.col_deep    / norm;
+  const personal= v.col_personal/ norm;
+  const sports  = v.col_sports  / norm;
+  const compete = v.col_compete / norm;
+
+  // Essay quality — income now dominant (college counselors, coached essays)
+  const essayQuality = clamp(0.30 * genuineCuriosity + 0.70 * income, 0, 1);
+
+  // Extracurricular score
+  const extracurricular = clamp(0.6 * compete + 0.4 * sports, 0, 1);
+
+  // First gen penalty
+  const firstGenPenalty = firstGen ? 0.08 : 0;
+
+  // SAT contribution (normalised back to 0-1)
+  const satNorm = (stages.sat.score - 400) / 1200;
+
+  // Admission score
+  const noise = rand(-0.03, 0.03);
+  const admScore = clamp(
+    0.40 * satNorm + 0.25 * essayQuality + 0.20 * extracurricular + 0.10 * schoolQuality - firstGenPenalty + noise,
+    0, 1
+  );
+
+  // College tier
+  let tier, tierLabel;
+  if (admScore >= 0.75) { tier = 4; tierLabel = 'Elite University'; }
+  else if (admScore >= 0.55) { tier = 3; tierLabel = 'Good University'; }
+  else if (admScore >= 0.35) { tier = 2; tierLabel = 'Average University'; }
+  else { tier = 1; tierLabel = 'Community College'; }
+
+  // Alignment happiness term
+  const alignment = 1 - Math.abs((tier / 4) - genuineCuriosity);
+  const firstGenStress = firstGen ? 0.15 : 0;
+
+  const h2 = clamp(
+    0.30 * personal + 0.30 * sports + 0.10 * deep + 0.15 * alignment - 0.20 * Math.pow(prep, 2) - firstGenStress,
+    -0.5, 1
+  );
+  happiness.h2 = h2;
+
+  stages.college = { score: Math.round(admScore * 100), tier, tierLabel, essayQuality, extracurricular, prep, deep, personal, sports: sports, compete };
+
+  document.getElementById('col-result').style.display = 'block';
+  document.getElementById('col-score-display').textContent = Math.round(admScore * 100);
+  document.getElementById('col-tier-display').textContent = tierLabel;
+  document.getElementById('col-tier-context').textContent = `Admission score: ${Math.round(admScore * 100)} / 100`;
+  document.getElementById('col-reflection').textContent = collegeReflection(tierLabel, essayQuality, income, firstGen, student);
+  document.getElementById('col-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function collegeReflection(tier, essay, income, firstGen, s) {
+  let text = `The admissions algorithm placed you at: ${tier}. `;
+  if (income < 0.3 && essay < 0.5) {
+    text += `Your essay score was partly limited by access to college counseling — a resource closely tied to family income. `;
+  }
+  if (firstGen) {
+    text += `As a first-generation student, navigating the admissions process without family guidance carried a hidden cost that the algorithm did not explain or forgive. `;
+  }
+  text += `Your SAT score — already shaped by your background — was the single heaviest factor in this outcome.`;
+  return text;
+}
+
+// ═══════════════════════════════════════════════
+//  STAGE 3 — GRE / GRAD ADMISSIONS
+// ═══════════════════════════════════════════════
+function computeGrad() {
+  const max = student.availableTime;
+  const total = getTotalBudget('grad-sliders');
+  if (total > max + 0.1) {
+    alert(`You've used ${total.toFixed(1)} time units but only have ${max}. Please reduce your allocations.`);
+    return;
+  }
+
+  const v = getSliderValues('grad-sliders');
+  const { genuineCuriosity, tutoringAccess, income } = student;
+  const norm = max > 0 ? max : 10;
+
+  const prepAbs  = v.grad_prep;
+  const deepN    = v.grad_deep    / norm;
+  const perN     = v.grad_personal/ norm;
+  const sportsN  = v.grad_sports  / norm;
+  const competeN = v.grad_compete / norm;
+  const prepN    = prepAbs / norm;
+
+  const tier = stages.college.tier / 4; // 0-1
+
+  // Research and recs cascade from college tier
+  const researchExp = clamp(0.75 * tier + 0.25 * genuineCuriosity, 0, 1);
+  const recQuality  = clamp(0.85 * tier + 0.15 * genuineCuriosity, 0, 1);
+
+  // GRE — same absolute-prep logic as SAT; college tier substitutes for school quality
+  const prepBoost2 = clamp(prepAbs * 0.15 * (0.20 + 0.80 * tutoringAccess), 0, 1);
+  const greRaw = clamp(0.15 + 0.10 * genuineCuriosity + 0.55 * prepBoost2 + 0.20 * tier + 0.02 * rand(-0.5, 0.5), 0, 1);
+  const greScore = Math.round(260 + greRaw * 80);
+
+  // Path authenticity
+  const pathAuthenticity = genuineCuriosity * (deepN + perN) / (prepN + deepN + perN + sportsN + competeN + 0.001);
+
+  // Grad score — curiosity barely matters directly; structure (tier → research/rec) dominates
+  const noise = rand(-0.03, 0.03);
+  const gradScore = clamp(
+    0.35 * greRaw + 0.32 * researchExp + 0.28 * recQuality + 0.05 * genuineCuriosity + noise,
+    0, 1
+  );
+
+  const h3 = clamp(
+    0.30 * perN + 0.30 * sportsN + 0.10 * deepN + 0.15 * pathAuthenticity - 0.20 * Math.pow(prepN, 2),
+    -0.5, 1
+  );
+  happiness.h3 = h3;
+
+  stages.grad = {
+    greScore, gradScore: Math.round(gradScore * 100),
+    researchExp, recQuality, pathAuthenticity,
+    prep: prepN, deep: deepN, personal: perN, sports: sportsN, compete: competeN
+  };
+
+  document.getElementById('grad-result').style.display = 'block';
+  document.getElementById('grad-gre-display').textContent = greScore;
+  document.getElementById('grad-score-display').textContent = Math.round(gradScore * 100);
+  document.getElementById('grad-reflection').textContent = gradReflection(gradScore, researchExp, recQuality, stages.college.tierLabel, student);
+  document.getElementById('grad-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function gradReflection(score, research, rec, collegeTier, s) {
+  let text = `Your graduate admissions outcome (${Math.round(score * 100)}/100) was shaped heavily by where your college journey left you. `;
+  text += `Research experience (${round1(research * 100)}%) and recommendation quality (${round1(rec * 100)}%) — both largely determined by your college tier (${collegeTier}) — together accounted for 55% of this score. `;
+  if (research < 0.4) {
+    text += `Limited research exposure at your college narrowed which graduate programmes were accessible to you, independent of your genuine curiosity.`;
+  } else {
+    text += `Your college's resources gave you credible research experience that the algorithm could recognise and reward.`;
+  }
+  return text;
+}
+
+// ═══════════════════════════════════════════════
+//  HAPPINESS REVEAL
+// ═══════════════════════════════════════════════
+function revealHappiness() {
+  const total = happiness.h1 + happiness.h2 + happiness.h3;
+  const happinessScore = Math.round(clamp((total / 3 + 0.5) * 100, 0, 100));
+
+  const finalOutcome = stages.grad.gradScore;
+  document.getElementById('reveal-outcome').textContent = finalOutcome + ' / 100';
+
+  // Happiness number
+  const numEl = document.getElementById('happiness-number');
+  numEl.textContent = happinessScore;
+  setTimeout(() => numEl.classList.add('revealed'), 100);
+
+  // Tagline
+  const tagEl = document.getElementById('happiness-tagline');
+  tagEl.textContent = happinessTagline(happinessScore, finalOutcome);
+  setTimeout(() => tagEl.classList.add('revealed'), 200);
+
+  // Breakdown — sat uses renamed keys (prepN/perN/sportsN/deepN); college & grad use prep/personal/sports/deep
+  const bkEl = document.getElementById('happiness-breakdown');
+  const allPrep    = (stages.sat.prepN   + stages.college.prep    + stages.grad.prep)    / 3;
+  const allPersonal= (stages.sat.perN    + stages.college.personal+ stages.grad.personal) / 3;
+  const allSports  = (stages.sat.sportsN + stages.college.sports  + stages.grad.sports)  / 3;
+  const allDeep    = (stages.sat.deepN   + stages.college.deep    + stages.grad.deep)    / 3;
+
+  // Already normalised fractions (0-1) — just rename clearly
+  const pNorm    = allPersonal;
+  const sNorm    = allSports;
+  const dNorm    = allDeep;
+  const prepNorm = allPrep;
+
+  bkEl.innerHTML = `
+    <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">What drove your happiness across all three stages:</div>
+    ${hBarItem('Personal interests', pNorm, 'positive')}
+    ${hBarItem('Sports & activities', sNorm, 'positive')}
+    ${hBarItem('Deep learning', dNorm * 0.5, 'positive')}
+    ${hBarItem('Test prep grind cost', Math.min(1, Math.pow(prepNorm, 1.5)), 'negative')}
+  `;
+  setTimeout(() => {
+    bkEl.classList.add('revealed');
+    document.querySelectorAll('.h-bar-fill').forEach(el => {
+      el.style.width = el.dataset.width;
+    });
+  }, 300);
+
+  setTimeout(() => {
+    document.getElementById('btn-big-picture').style.display = 'inline-flex';
+  }, 2000);
+}
+
+function hBarItem(name, val, type) {
+  const pct = Math.round(clamp(val, 0, 1) * 100);
+  return `<div class="h-bar-item">
+    <span class="h-bar-name">${name}</span>
+    <div class="h-bar-track">
+      <div class="h-bar-fill ${type}" data-width="${pct}%" style="width:0%"></div>
+    </div>
+    <span class="h-bar-val ${type}">${type === 'negative' ? '-' : '+'}${pct}</span>
+  </div>`;
+}
+
+function happinessTagline(h, outcome) {
+  if (h >= 70 && outcome >= 70) return 'You found balance. Not everyone does.';
+  if (h >= 70 && outcome < 50) return 'The algorithm undervalued you. You knew what mattered.';
+  if (h < 40 && outcome >= 70) return 'You won the game the algorithm set. Was it worth it?';
+  if (h < 40 && outcome < 50) return 'The system took from you in every direction.';
+  return 'You navigated the system as best you could.';
+}
+
+// ═══════════════════════════════════════════════
+//  BIG PICTURE — POPULATION SIMULATION
+// ═══════════════════════════════════════════════
+function simulateOneStudent() {
+  const income           = skewedIncome();
+  const schoolQuality    = clamp(0.6 * income + 0.4 * rand(0, 1), 0, 1);
+  const genuineCuriosity = rand(0.1, 1.0);                     // INDEPENDENT of income
+  const tutoringAccess   = Math.pow(income, 0.7);
+  const firstGen         = Math.random() < (1 - income * 0.7);
+
+  // ── TIME ALLOCATION (absolute units, not fractions) ──────────────────────
+  // Higher income → more absolute prep investment; deep learning NOT tied to curiosity
+  const prepTime    = clamp(0.5 + income * 7.5  + rand(-0.5, 0.5), 0.5, 8.5);
+  const deepTime    = clamp(0.5 + rand(0, 2.0),                     0.5, 3.0); // curiosity-independent
+  const sportsTime  = clamp(0.5 + rand(0, 1.5),                     0.5, 2.5);
+  const personalTime= clamp(0.5 + rand(0, 2.0),                     0.5, 2.5);
+  const competeTime = clamp(income * 1.5 + rand(0, 0.8),            0.0, 2.5);
+  const totalTime   = prepTime + deepTime + sportsTime + personalTime + competeTime;
+
+  // Normalised fractions used only for happiness and extracurriculars
+  const pN   = prepTime    / totalTime;
+  const dN   = deepTime    / totalTime;
+  const sN   = sportsTime  / totalTime;
+  const perN = personalTime/ totalTime;
+  const cN   = competeTime / totalTime;
+
+  // ── SAT ──────────────────────────────────────────────────────────────────
+  // baseKnowledge: school quality (income-driven) dominates; curiosity is minor
+  const baseKnowledge = clamp(0.65 * schoolQuality + 0.10 * genuineCuriosity + 0.25 * dN, 0, 1);
+  // prepBoost: absolute hours × tutoring quality — this is where income compounds
+  const prepBoost = clamp(prepTime * 0.15 * (0.20 + 0.80 * tutoringAccess), 0, 1);
+  const satRaw = clamp(0.15 + 0.20 * baseKnowledge + 0.55 * prepBoost + 0.08 * cN + rand(-0.03, 0.03), 0, 1);
+
+  // ── COLLEGE ──────────────────────────────────────────────────────────────
+  const essayQuality   = clamp(0.30 * genuineCuriosity + 0.70 * income, 0, 1);
+  const extracurricular= clamp(0.6 * cN + 0.4 * sN, 0, 1);
+  const firstGenPenalty= firstGen ? 0.08 : 0;
+  const admScore = clamp(0.40 * satRaw + 0.25 * essayQuality + 0.20 * extracurricular + 0.10 * schoolQuality - firstGenPenalty + rand(-0.03, 0.03), 0, 1);
+  const tier  = admScore >= 0.75 ? 4 : admScore >= 0.55 ? 3 : admScore >= 0.35 ? 2 : 1;
+  const tierN = tier / 4;
+
+  // ── GRAD ─────────────────────────────────────────────────────────────────
+  const researchExp = clamp(0.75 * tierN + 0.25 * genuineCuriosity, 0, 1);
+  const recQuality  = clamp(0.85 * tierN + 0.15 * genuineCuriosity, 0, 1);
+  const prepBoost2  = clamp(prepTime * 0.15 * (0.20 + 0.80 * tutoringAccess), 0, 1);
+  const greRaw = clamp(0.15 + 0.10 * genuineCuriosity + 0.55 * prepBoost2 + 0.20 * tierN + rand(-0.03, 0.03), 0, 1);
+  const gradScore = clamp(0.35 * greRaw + 0.32 * researchExp + 0.28 * recQuality + 0.05 * genuineCuriosity + rand(-0.03, 0.03), 0, 1);
+
+  // ── HAPPINESS ────────────────────────────────────────────────────────────
+  const pathAuth      = genuineCuriosity * (dN + perN) / (pN + dN + perN + sN + cN + 0.001);
+  const alignment     = 1 - Math.abs(tierN - genuineCuriosity);
+  const firstGenStress= firstGen ? 0.15 : 0;
+
+  const h1 = clamp(0.35 * perN + 0.35 * sN + 0.15 * dN - 0.25 * Math.pow(pN, 2), -0.5, 1);
+  const h2 = clamp(0.30 * perN + 0.30 * sN + 0.10 * dN + 0.15 * alignment - 0.20 * Math.pow(pN, 2) - firstGenStress, -0.5, 1);
+  const h3 = clamp(0.30 * perN + 0.30 * sN + 0.10 * dN + 0.15 * pathAuth   - 0.20 * Math.pow(pN, 2), -0.5, 1);
+
+  const happinessScore = Math.round(clamp(((h1 + h2 + h3) / 3 + 0.5) * 100, 0, 100));
+
+  return { income, genuineCuriosity, finalScore: Math.round(gradScore * 100), happinessScore };
+}
+
+function buildBigPicture() {
+  const N = 300;
+  const population = [];
+  for (let i = 0; i < N; i++) {
+    population.push(simulateOneStudent());
+  }
+
+  // User's simulated result
+  const userResult = {
+    income: student.income,
+    genuineCuriosity: student.genuineCuriosity,
+    finalScore: stages.grad.gradScore,
+    happinessScore: Math.round(clamp(((happiness.h1 + happiness.h2 + happiness.h3) / 3 + 0.5) * 100, 0, 100)),
+  };
+
+  function incomeColor(inc, alpha=0.65) {
+    if (inc < 0.30) return `rgba(255,101,132,${alpha})`;
+    if (inc < 0.65) return `rgba(249,202,36,${alpha})`;
+    return `rgba(108,99,255,${alpha})`;
+  }
+
+  const popData  = population.map(p => ({ x: p.income * 100,           y: p.genuineCuriosity * 100, income: p.income }));
+  const popDataClaim = population.map(p => ({ x: p.genuineCuriosity * 100, y: p.finalScore,          income: p.income }));
+  const popData2 = population.map(p => ({ x: p.income * 100,           y: p.finalScore,              income: p.income }));
+  const popData3 = population.map(p => ({ x: p.finalScore,             y: p.happinessScore,          income: p.income }));
+
+  const chartDefaults = {
+    type: 'scatter',
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: {
+        label: ctx => {
+          const d = ctx.raw;
+          return `(${Math.round(d.x)}, ${Math.round(d.y)})`;
+        }
+      }}},
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#7b82a8', font: { size: 10 } } },
+        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#7b82a8', font: { size: 10 } } },
+      },
+      animation: { duration: 800 },
+    }
+  };
+
+  // Chart 1 — Curiosity vs Income
+  if (charts.c1) charts.c1.destroy();
+  charts.c1 = new Chart(document.getElementById('chart-curiosity'), {
+    ...chartDefaults,
+    data: {
+      datasets: [
+        {
+          data: popData,
+          backgroundColor: popData.map(d => incomeColor(d.income)),
+          pointRadius: 4,
+        },
+        {
+          data: [{ x: userResult.income * 100, y: userResult.genuineCuriosity * 100 }],
+          backgroundColor: '#ff2200',
+          borderColor: '#ffffff',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          pointStyle: 'circle',
+          order: 0,
+        }
+      ]
+    },
+    options: { ...chartDefaults.options, scales: {
+      ...chartDefaults.options.scales,
+      x: { ...chartDefaults.options.scales.x, title: { display: true, text: 'Family Income →', color: '#7b82a8', font: { size: 10 } }, min: 0, max: 100 },
+      y: { ...chartDefaults.options.scales.y, title: { display: true, text: 'Genuine Curiosity →', color: '#7b82a8', font: { size: 10 } }, min: 0, max: 100 },
+    }}
+  });
+
+  // Chart CLAIM — Outcome vs Genuine Curiosity (what the algorithm claims to measure)
+  if (charts.cClaim) charts.cClaim.destroy();
+  charts.cClaim = new Chart(document.getElementById('chart-claim'), {
+    ...chartDefaults,
+    data: {
+      datasets: [
+        {
+          data: popDataClaim,
+          backgroundColor: popDataClaim.map(d => incomeColor(d.income)),
+          pointRadius: 4,
+        },
+        {
+          data: [{ x: userResult.genuineCuriosity * 100, y: userResult.finalScore }],
+          backgroundColor: '#ff2200',
+          borderColor: '#ffffff',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          pointStyle: 'circle',
+          order: 0,
+        }
+      ]
+    },
+    options: { ...chartDefaults.options, scales: {
+      ...chartDefaults.options.scales,
+      x: { ...chartDefaults.options.scales.x, title: { display: true, text: 'Genuine Curiosity →', color: '#7b82a8', font: { size: 10 } }, min: 0, max: 100 },
+      y: { ...chartDefaults.options.scales.y, title: { display: true, text: 'Final Outcome Score →', color: '#7b82a8', font: { size: 10 } }, min: 0, max: 100 },
+    }}
+  });
+
+  // Chart 2 — Outcome vs Income
+  if (charts.c2) charts.c2.destroy();
+  charts.c2 = new Chart(document.getElementById('chart-outcome'), {
+    ...chartDefaults,
+    data: {
+      datasets: [
+        {
+          data: popData2,
+          backgroundColor: popData2.map(d => incomeColor(d.income)),
+          pointRadius: 4,
+        },
+        {
+          data: [{ x: userResult.income * 100, y: userResult.finalScore }],
+          backgroundColor: '#ff2200',
+          borderColor: '#ffffff',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          pointStyle: 'circle',
+          order: 0,
+        }
+      ]
+    },
+    options: { ...chartDefaults.options, scales: {
+      ...chartDefaults.options.scales,
+      x: { ...chartDefaults.option?.scales?.x, ...chartDefaults.options.scales.x, title: { display: true, text: 'Family Income →', color: '#7b82a8', font: { size: 10 } }, min: 0, max: 100 },
+      y: { ...chartDefaults.options.scales.y, title: { display: true, text: 'Final Outcome Score →', color: '#7b82a8', font: { size: 10 } }, min: 0, max: 100 },
+    }}
+  });
+
+  // Chart 3 — Happiness vs Outcome
+  if (charts.c3) charts.c3.destroy();
+  charts.c3 = new Chart(document.getElementById('chart-happiness'), {
+    ...chartDefaults,
+    data: {
+      datasets: [
+        {
+          data: popData3,
+          backgroundColor: popData3.map(d => incomeColor(d.income)),
+          pointRadius: 4,
+        },
+        {
+          data: [{ x: userResult.finalScore, y: userResult.happinessScore }],
+          backgroundColor: '#ff2200',
+          borderColor: '#ffffff',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          pointStyle: 'circle',
+          order: 0,
+        }
+      ]
+    },
+    options: { ...chartDefaults.options, scales: {
+      ...chartDefaults.options.scales,
+      x: { ...chartDefaults.options.scales.x, title: { display: true, text: 'Final Outcome Score →', color: '#7b82a8', font: { size: 10 } }, min: 0, max: 100 },
+      y: { ...chartDefaults.options.scales.y, title: { display: true, text: 'Happiness Score →', color: '#7b82a8', font: { size: 10 } }, min: 0, max: 100 },
+    }}
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  YOU-ARROW PLUGIN
+// ═══════════════════════════════════════════════
+// Draw a proper 5-pointed star on canvas
+function drawStar5(ctx, cx, cy, outerR, innerR, fillColor) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const angle = (i * Math.PI / 5) - Math.PI / 2; // start from top point
+    const r = i % 2 === 0 ? outerR : innerR;
+    const x = cx + r * Math.cos(angle);
+    const y = cy + r * Math.sin(angle);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = fillColor;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.2;
+  ctx.fill();
+  ctx.stroke();
+}
+
+const youArrowPlugin = {
+  id: 'youArrow',
+  afterDraw(chart) {
+    const meta = chart.getDatasetMeta(1);
+    if (!meta || !meta.data || !meta.data[0]) return;
+    const pos = meta.data[0].getProps(['x', 'y'], true);
+    const cx = pos.x, cy = pos.y;
+    const ctx = chart.ctx;
+
+    ctx.save();
+
+    // Draw 5-pointed star at data point
+    drawStar5(ctx, cx, cy, 9, 4, '#ff2200');
+
+    // Arrow line from above the star
+    const starTop = cy - 10;
+    const arrowBase = cy - 46;
+    ctx.beginPath();
+    ctx.moveTo(cx, arrowBase);
+    ctx.lineTo(cx, starTop);
+    ctx.strokeStyle = '#ff2200';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Arrowhead (downward pointing triangle)
+    ctx.beginPath();
+    ctx.moveTo(cx, starTop);
+    ctx.lineTo(cx - 6, starTop - 11);
+    ctx.lineTo(cx + 6, starTop - 11);
+    ctx.closePath();
+    ctx.fillStyle = '#ff2200';
+    ctx.fill();
+
+    // "YOU" pill label
+    ctx.font = 'bold 11px Segoe UI, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    const labelY = arrowBase - 6;
+    const textW = ctx.measureText('YOU').width;
+    const padX = 8, padY = 5;
+    const rx = cx - textW / 2 - padX;
+    const ry = labelY - 13 - padY;
+    const rw = textW + padX * 2;
+    const rh = 13 + padY * 2;
+    const r = 5;
+    ctx.beginPath();
+    ctx.moveTo(rx + r, ry);
+    ctx.lineTo(rx + rw - r, ry);
+    ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + r);
+    ctx.lineTo(rx + rw, ry + rh - r);
+    ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - r, ry + rh);
+    ctx.lineTo(rx + r, ry + rh);
+    ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - r);
+    ctx.lineTo(rx, ry + r);
+    ctx.quadraticCurveTo(rx, ry, rx + r, ry);
+    ctx.closePath();
+    ctx.fillStyle = '#ff2200';
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('YOU', cx, labelY);
+
+    ctx.restore();
+  }
+};
+Chart.register(youArrowPlugin);
+
+// ═══════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════
+// Chart.js global defaults for dark theme
+Chart.defaults.color = '#7b82a8';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
+</script>
+</body>
+</html>
